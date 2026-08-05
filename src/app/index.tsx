@@ -1,98 +1,187 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+import WeatherMetric from "../../components/WeatherMetric";
+import { getCurrentWeather } from "../../services/weatherService";
 
 export default function HomeScreen() {
+  const [weather, setWeather] = useState<any>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadWeather();
+  }, []);
+
+  const loadWeather = async () => {
+    try {
+      setError("");
+
+      const data = await getCurrentWeather();
+      setWeather(data);
+    } catch (err) {
+      setError(
+        "Unable to retrieve weather information. Check your internet connection.",
+      );
+    }
+  };
+
+  const getWeatherIcon = (code: number) => {
+    if (code <= 3) return "☀️";
+    if (code <= 48) return "☁️";
+    if (code <= 67) return "🌧️";
+    return "❄️";
+  };
+
+  const getWeatherDescription = (code: number) => {
+    if (code <= 3) return "Sunny";
+    if (code <= 48) return "Cloudy";
+    if (code <= 67) return "Rainy";
+    return "Snowy";
+  };
+
+  const getBackgroundColor = (code: number) => {
+    if (code <= 3) return "#DFF3FF";
+    if (code <= 48) return "#C7D8E5";
+    if (code <= 67) return "#7C95B3";
+    return "#F4F9FF";
+  };
+
+  if (error) {
+    return (
+      <View style={styles.loading}>
+        <Text>{error}</Text>
+      </View>
+    );
+  }
+
+  if (!weather) {
+    return (
+      <View style={styles.loading}>
+        <Text>Loading Weather...</Text>
+      </View>
+    );
+  }
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <ScrollView
+      style={[
+        styles.container,
+        {
+          backgroundColor: getBackgroundColor(weather.weatherCode),
+        },
+      ]}
+    >
+      <View style={styles.hero}>
+        <Text style={styles.city}>{weather.city}</Text>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+        <Text style={styles.icon}>{getWeatherIcon(weather.weatherCode)}</Text>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+        <Text style={styles.temperature}>{weather.temperature}°</Text>
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+        <Text style={styles.condition}>{getWeatherDescription(weather.weatherCode)}</Text>
+      </View>
+
+      <View style={styles.grid}>
+        <WeatherMetric label="Humidity" value={`${weather.humidity}%`} />
+
+        <WeatherMetric label="Wind" value={`${weather.windSpeed} km/h`} />
+      </View>
+
+      <View style={styles.grid}>
+        <WeatherMetric label="High" value={`${weather.high}°`} />
+
+        <WeatherMetric label="Low" value={`${weather.low}°`} />
+      </View>
+
+      <Text style={styles.feelsLike}>Feels Like {weather.temperature}°</Text>
+
+      <View style={styles.alert}>
+        <Text style={styles.alertTitle}>⚠ Weather Alert</Text>
+
+        <Text>Weather conditions may change throughout the day. Check the 7-day forecast for upcoming changes and temperature trends.
+        </Text>
+      </View>
+
+      <Pressable style={styles.refreshButton} onPress={() => loadWeather()}>
+        <Text style={styles.refreshText}>Refresh Weather</Text>
+      </Pressable>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   container: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
+    padding: 20,
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+
+  hero: {
+    alignItems: "center",
+    marginBottom: 20,
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+
+  city: {
+    fontSize: 32,
+    fontWeight: "bold",
   },
-  title: {
-    textAlign: 'center',
+
+  icon: {
+    fontSize: 70,
+    marginVertical: 10,
   },
-  code: {
-    textTransform: 'uppercase',
+
+  temperature: {
+    fontSize: 72,
+    fontWeight: "bold",
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+
+  condition: {
+    fontSize: 18,
+    color: "#555",
+  },
+
+  grid: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+  },
+
+  alert: {
+    marginTop: 15,
+    backgroundColor: "#FFF7D6",
+    padding: 15,
+    borderRadius: 15,
+  },
+
+  alertTitle: {
+    fontWeight: "bold",
+    marginBottom: 5,
+  },
+
+  feelsLike: {
+  textAlign: "center",
+  marginTop: 10,
+  fontSize: 16,
+  color: "#526D82",
+  },
+
+  refreshButton: {
+  backgroundColor: "#2563EB",
+  paddingVertical: 14,
+  borderRadius: 12,
+  alignItems: "center",
+  marginTop: 15,
+  },
+
+refreshText: {
+  color: "#FFFFFF",
+  fontWeight: "bold",
+  fontSize: 16,
   },
 });
