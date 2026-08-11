@@ -1,4 +1,8 @@
+// Minh Khoi Ha part
 import { View, Text, StyleSheet } from "react-native";
+
+import { useApp } from "../context/AppContext";
+import { getAppTheme } from "../utils/theme";
 
 type Props = {
   label: string;
@@ -9,10 +13,13 @@ export default function WeatherMetric({
   label,
   value,
 }: Props) {
+  const { settings } = useApp();
+  const theme = getAppTheme(settings.backgroundStyle);
+
   return (
-    <View style={styles.card}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+    <View style={[styles.card, { backgroundColor: theme.card }]}>
+      <Text style={[styles.label, { color: theme.mutedText }]}>{label}</Text>
+      <Text style={[styles.value, { color: theme.text }]}>{value}</Text>
     </View>
   );
 }

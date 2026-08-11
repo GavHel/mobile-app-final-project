@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile-app-final-project",
+    "name": "The Frosty Forecast",
     "slug": "mobile-app-final-project",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -25,6 +25,12 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow The Frosty Forecast to use your location for local weather."
+        }
+      ],
       [
         "expo-splash-screen",
         {
