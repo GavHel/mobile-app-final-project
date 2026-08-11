@@ -1,172 +1,306 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useState } from "react";
+import { useRouter } from "expo-router";
 import {
+  ActivityIndicator,
+  Keyboard,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  CurrentWeather,
-  getWeatherByLocation,
-  searchCity,
-} from "../../services/weatherService";
+import PrimaryButton from "../../components/PrimaryButton";
+import ScreenHeader from "../../components/ScreenHeader";
+import { useApp } from "../../context/AppContext";
+import { searchLocations } from "../../services/weatherService";
+import { WeatherLocation } from "../../types/weather";
+import { getAppTheme } from "../../utils/theme";
 
-export default function Search() {
-  const [city, setCity] = useState("");
-  const [weather, setWeather] = useState<CurrentWeather | null>(null);
-  const [message, setMessage] = useState("");
+const POPULAR_LOCATIONS: WeatherLocation[] = [
+  {
+    id: "5913490",
+    name: "Calgary",
+    region: "Alberta",
+    country: "Canada",
+    latitude: 51.05011,
+    longitude: -114.08529,
+  },
+  {
+    id: "5946768",
+    name: "Edmonton",
+    region: "Alberta",
+    country: "Canada",
+    latitude: 53.55014,
+    longitude: -113.46871,
+  },
+  {
+    id: "6167865",
+    name: "Toronto",
+    region: "Ontario",
+    country: "Canada",
+    latitude: 43.70011,
+    longitude: -79.4163,
+  },
+  {
+    id: "6173331",
+    name: "Vancouver",
+    region: "British Columbia",
+    country: "Canada",
+    latitude: 49.24966,
+    longitude: -123.11934,
+  },
+];
 
-  const handleSearch = async () => {
-    if (city === "") {
-      setMessage("Enter a city");
-      setWeather(null);
-      return;
-    }
-
-    const result = await searchCity(city);
-
-    if (result) {
-      const weatherData = await getWeatherByLocation(
-        result.latitude,
-        result.longitude,
-        result.name,
-      );
-
-      setWeather(weatherData);
-      setMessage("");
-    } else {
-      setWeather(null);
-      setMessage("City not found");
-    }
-  };
-
-  const saveLocation = async () => {
-    if (!weather) {
-      return;
-    }
-
-    const saved = await AsyncStorage.getItem("savedLocations");
-
-    let locations = [];
-
-    if (saved) {
-      locations = JSON.parse(saved);
-    }
-
-    const alreadySaved = locations.find(
-      (item: any) => item.city === weather.city,
-    );
-
-    if (!alreadySaved) {
-      locations.push(weather);
-
-      await AsyncStorage.setItem("savedLocations", JSON.stringify(locations));
-
-      setMessage("Location saved");
-    } else {
-      setMessage("Location already saved");
-    }
-  };
+function LocationButton({
+  location,
+  onPress,
+}: {
+  location: WeatherLocation;
+  onPress: () => void;
+}) {
+  const { settings } = useApp();
+  // Minh Khoi Ha part
+  const theme = getAppTheme(settings.backgroundStyle);
+  const subtitle = [location.region, location.country].filter(Boolean).join(", ");
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Search City</Text>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.locationButton,
+        { backgroundColor: theme.softCard, borderColor: theme.border },
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.locationText}>
+        <Text style={[styles.locationName, { color: theme.text }]}>{location.name}</Text>
+        <Text
+          style={[styles.locationSubtitle, { color: theme.mutedText }]}
+          numberOfLines={1}
+        >
+          {subtitle}
+        </Text>
+      </View>
+      <Text style={styles.chevron}>›</Text>
+    </Pressable>
+  );
+}
 
-      <TextInput
-        style={styles.input}
-        placeholder="Enter city"
-        value={city}
-        onChangeText={setCity}
-      />
+export default function SearchScreen() {
+  const router = useRouter();
+  const { recentSearches, selectLocation, settings } = useApp();
+  // Minh Khoi Ha part
+  const theme = getAppTheme(settings.backgroundStyle);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<WeatherLocation[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
 
-      <TouchableOpacity style={styles.button} onPress={handleSearch}>
-        <Text style={styles.buttonText}>Search</Text>
-      </TouchableOpacity>
+  async function handleSearch() {
+    const searchText = query.trim();
 
-      {message !== "" && <Text style={styles.message}>{message}</Text>}
+    if (searchText.length < 2) {
+      setError("Enter at least two letters of a city or location.");
+      return;
+    }
 
-      {weather && (
-        <View style={styles.card}>
-          <Text style={styles.cityName}>{weather.city}</Text>
+    try {
+      Keyboard.dismiss();
+      setLoading(true);
+      setError("");
+      setHasSearched(true);
+      const locations = await searchLocations(searchText);
+      setResults(locations);
 
-          <Text style={styles.temperature}>{weather.temperature}°C</Text>
+      if (locations.length === 0) {
+        setError("No locations were found. Check the spelling and try again.");
+      }
+    } catch {
+      setError("Search is unavailable. Check your internet connection and try again.");
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-          <Text>Humidity: {weather.humidity}%</Text>
-          <Text>Wind: {weather.windSpeed} km/h</Text>
-          <Text>High: {weather.high}°C</Text>
-          <Text>Low: {weather.low}°C</Text>
-          <TouchableOpacity style={styles.saveButton} onPress={saveLocation}>
-            <Text style={styles.buttonText}>Save Location</Text>
-          </TouchableOpacity>
+  function chooseLocation(location: WeatherLocation) {
+    selectLocation(location);
+    router.replace("/");
+  }
+
+  return (
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: theme.screen }]}
+      edges={["top"]}
+    >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <ScreenHeader title="Search Location" />
+        <Text style={[styles.title, { color: theme.text }]}>Find a city</Text>
+        <Text style={[styles.subtitle, { color: theme.mutedText }]}>Search for another weather location.</Text>
+
+        <Text style={[styles.label, { color: theme.text }]}>City or location</Text>
+        <TextInput
+          accessibilityLabel="City or location"
+          autoCapitalize="words"
+          autoCorrect={false}
+          onChangeText={setQuery}
+          onSubmitEditing={handleSearch}
+          placeholder="Example: Edmonton"
+          placeholderTextColor={theme.mutedText}
+          returnKeyType="search"
+          style={[
+            styles.input,
+            {
+              color: theme.text,
+              backgroundColor: theme.card,
+              borderColor: theme.inputBorder,
+            },
+          ]}
+          value={query}
+        />
+        <PrimaryButton label="Search" onPress={handleSearch} disabled={loading} />
+
+        {loading && (
+          <ActivityIndicator style={styles.loader} size="large" color="#2563EB" />
+        )}
+        {error ? <Text style={[styles.error, { color: theme.error }]}>{error}</Text> : null}
+
+        {hasSearched && results.length > 0 && (
+          <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Search Results</Text>
+            {results.map((location) => (
+              <LocationButton
+                key={location.id}
+                location={location}
+                onPress={() => chooseLocation(location)}
+              />
+            ))}
+          </View>
+        )}
+
+        {recentSearches.length > 0 && (
+          <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Recent Searches</Text>
+            {recentSearches.map((location) => (
+              <LocationButton
+                key={location.id}
+                location={location}
+                onPress={() => chooseLocation(location)}
+              />
+            ))}
+          </View>
+        )}
+
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Popular Locations</Text>
+          {POPULAR_LOCATIONS.map((location) => (
+            <LocationButton
+              key={location.id}
+              location={location}
+              onPress={() => chooseLocation(location)}
+            />
+          ))}
         </View>
-      )}
-    </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: "#eaf6ff",
-    padding: 20,
+    backgroundColor: "#EEF6FB",
   },
-
+  content: {
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+  },
   title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    marginBottom: 20,
+    marginTop: 4,
+    color: "#102A43",
+    fontSize: 28,
+    fontWeight: "800",
   },
-
+  subtitle: {
+    marginTop: 3,
+    marginBottom: 18,
+    color: "#526D82",
+  },
+  label: {
+    marginBottom: 7,
+    color: "#102A43",
+    fontWeight: "700",
+  },
   input: {
-    backgroundColor: "white",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 10,
+    minHeight: 52,
+    paddingHorizontal: 14,
+    color: "#102A43",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#9FB3C4",
+    borderRadius: 14,
+    fontSize: 16,
   },
-
-  button: {
-    backgroundColor: "#2563eb",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-
-  buttonText: {
-    color: "white",
-    fontWeight: "bold",
-  },
-
-  saveButton: {
-    backgroundColor: "#1db36d",
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 15,
-    alignItems: "center",
-  },
-
-  message: {
-    marginTop: 15,
-    color: "red",
-  },
-
-  card: {
+  loader: {
     marginTop: 20,
-    backgroundColor: "white",
-    padding: 15,
-    borderRadius: 8,
   },
-
-  cityName: {
-    fontSize: 20,
-    fontWeight: "bold",
+  error: {
+    marginTop: 14,
+    color: "#9B1C1C",
+    textAlign: "center",
   },
-
-  temperature: {
-    fontSize: 32,
-    fontWeight: "bold",
-    marginVertical: 10,
+  card: {
+    marginTop: 16,
+    padding: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD9E6",
+    borderRadius: 18,
+  },
+  cardTitle: {
+    marginBottom: 10,
+    color: "#102A43",
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  locationButton: {
+    minHeight: 62,
+    marginBottom: 9,
+    paddingHorizontal: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FBFD",
+    borderWidth: 1,
+    borderColor: "#D6E1EA",
+    borderRadius: 14,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  locationText: {
+    flex: 1,
+  },
+  locationName: {
+    color: "#102A43",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  locationSubtitle: {
+    marginTop: 3,
+    color: "#526D82",
+    fontSize: 13,
+  },
+  chevron: {
+    marginLeft: 10,
+    color: "#2563EB",
+    fontSize: 26,
   },
 });

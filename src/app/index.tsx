@@ -1,187 +1,260 @@
-import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
+import PrimaryButton from "../../components/PrimaryButton";
+import ScreenHeader from "../../components/ScreenHeader";
 import WeatherMetric from "../../components/WeatherMetric";
+import { useApp } from "../../context/AppContext";
 import { getCurrentWeather } from "../../services/weatherService";
+import { CurrentWeather } from "../../types/weather";
+import {
+  formatTemperature,
+  getWeatherAlert,
+  getWeatherBackground,
+  getWeatherDescription,
+  getWeatherIcon,
+} from "../../utils/weather";
+import { getAppTheme } from "../../utils/theme";
 
 export default function HomeScreen() {
-  const [weather, setWeather] = useState<any>(null);
+  const router = useRouter();
+  const {
+    selectedLocation,
+    settings,
+    saveLocation,
+    isLocationSaved,
+  } = useApp();
+  const [weather, setWeather] = useState<CurrentWeather | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Minh Khoi Ha part
+  const theme = getAppTheme(settings.backgroundStyle);
+
+  const loadWeather = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const data = await getCurrentWeather(selectedLocation);
+      setWeather(data);
+    } catch {
+      setError(
+        "Unable to retrieve weather information. Check your internet connection and try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedLocation]);
 
   useEffect(() => {
+    // Show the loading state while a newly selected city's API request runs.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadWeather();
-  }, []);
+  }, [loadWeather]);
 
-  const loadWeather = async () => {
-    try {
-      setError("");
-
-      const data = await getCurrentWeather();
-      setWeather(data);
-    } catch (err) {
-      setError(
-        "Unable to retrieve weather information. Check your internet connection.",
-      );
-    }
-  };
-
-  const getWeatherIcon = (code: number) => {
-    if (code <= 3) return "☀️";
-    if (code <= 48) return "☁️";
-    if (code <= 67) return "🌧️";
-    return "❄️";
-  };
-
-  const getWeatherDescription = (code: number) => {
-    if (code <= 3) return "Sunny";
-    if (code <= 48) return "Cloudy";
-    if (code <= 67) return "Rainy";
-    return "Snowy";
-  };
-
-  const getBackgroundColor = (code: number) => {
-    if (code <= 3) return "#DFF3FF";
-    if (code <= 48) return "#C7D8E5";
-    if (code <= 67) return "#7C95B3";
-    return "#F4F9FF";
-  };
-
-  if (error) {
-    return (
-      <View style={styles.loading}>
-        <Text>{error}</Text>
-      </View>
-    );
-  }
-
-  if (!weather) {
-    return (
-      <View style={styles.loading}>
-        <Text>Loading Weather...</Text>
-      </View>
-    );
-  }
+  const backgroundColor = weather
+    ? getWeatherBackground(weather.weatherCode, settings.backgroundStyle)
+    : theme.screen;
+  const lightText = theme.isDark;
 
   return (
-    <ScrollView
-      style={[
-        styles.container,
-        {
-          backgroundColor: getBackgroundColor(weather.weatherCode),
-        },
-      ]}
-    >
-      <View style={styles.hero}>
-        <Text style={styles.city}>{weather.city}</Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor }]} edges={["top"]}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <ScreenHeader
+          title="The Frosty Forecast"
+          actionIcon="search"
+          actionLabel="Search for a location"
+          onAction={() => router.push("/search")}
+          lightText={lightText}
+        />
 
-        <Text style={styles.icon}>{getWeatherIcon(weather.weatherCode)}</Text>
+        {loading ? (
+          <View style={styles.messageBox}>
+            <ActivityIndicator size="large" color="#2563EB" />
+            <Text style={[styles.messageText, { color: theme.mutedText }]}>Loading weather...</Text>
+          </View>
+        ) : error || !weather ? (
+          <View style={styles.messageBox}>
+            <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+            <PrimaryButton label="Try Again" onPress={loadWeather} />
+          </View>
+        ) : (
+          <>
+            <View style={styles.hero}>
+              <Text style={[styles.city, lightText && styles.lightText]}>
+                {selectedLocation.name}
+              </Text>
+              <Text style={[styles.date, lightText && styles.lightSubtle]}>
+                {new Date().toLocaleDateString("en-CA", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </Text>
+              <Text style={styles.icon}>{getWeatherIcon(weather.weatherCode)}</Text>
+              <Text style={[styles.temperature, lightText && styles.lightText]}>
+                {formatTemperature(weather.temperature, settings.temperatureUnit)}
+              </Text>
+              <Text style={[styles.condition, lightText && styles.lightText]}>
+                {getWeatherDescription(weather.weatherCode)}
+              </Text>
+              <Text style={[styles.date, lightText && styles.lightSubtle]}>
+                Feels like {formatTemperature(
+                  weather.apparentTemperature,
+                  settings.temperatureUnit,
+                )}
+              </Text>
+            </View>
 
-        <Text style={styles.temperature}>{weather.temperature}°</Text>
+            <View style={styles.grid}>
+              <WeatherMetric label="Humidity" value={`${weather.humidity}%`} />
+              <WeatherMetric label="Wind" value={`${weather.windSpeed} km/h`} />
+            </View>
+            <View style={styles.grid}>
+              <WeatherMetric
+                label="High"
+                value={formatTemperature(weather.high, settings.temperatureUnit)}
+              />
+              <WeatherMetric
+                label="Low"
+                value={formatTemperature(weather.low, settings.temperatureUnit)}
+              />
+            </View>
 
-        <Text style={styles.condition}>{getWeatherDescription(weather.weatherCode)}</Text>
-      </View>
+            {settings.weatherAlerts && (
+              <View
+                style={[
+                  styles.card,
+                  styles.alertCard,
+                  theme.isDark && styles.darkAlertCard,
+                ]}
+              >
+                <Text style={[styles.cardTitle, theme.isDark && styles.lightText]}>
+                  ⚠ Weather Alert
+                </Text>
+                <Text style={[styles.cardText, theme.isDark && styles.lightSubtle]}>
+                  {getWeatherAlert(weather.weatherCode)}
+                </Text>
+              </View>
+            )}
 
-      <View style={styles.grid}>
-        <WeatherMetric label="Humidity" value={`${weather.humidity}%`} />
-
-        <WeatherMetric label="Wind" value={`${weather.windSpeed} km/h`} />
-      </View>
-
-      <View style={styles.grid}>
-        <WeatherMetric label="High" value={`${weather.high}°`} />
-
-        <WeatherMetric label="Low" value={`${weather.low}°`} />
-      </View>
-
-      <Text style={styles.feelsLike}>Feels Like {weather.temperature}°</Text>
-
-      <View style={styles.alert}>
-        <Text style={styles.alertTitle}>⚠ Weather Alert</Text>
-
-        <Text>Weather conditions may change throughout the day. Check the 7-day forecast for upcoming changes and temperature trends.
-        </Text>
-      </View>
-
-      <Pressable style={styles.refreshButton} onPress={() => loadWeather()}>
-        <Text style={styles.refreshText}>Refresh Weather</Text>
-      </Pressable>
-    </ScrollView>
+            <PrimaryButton
+              label="View 7-Day Forecast"
+              onPress={() => router.push("/forecast")}
+            />
+            <PrimaryButton
+              label={
+                isLocationSaved(selectedLocation.id)
+                  ? "Location Saved"
+                  : "Save This Location"
+              }
+              onPress={() => saveLocation(selectedLocation)}
+              secondary
+              disabled={isLocationSaved(selectedLocation.id)}
+            />
+            <PrimaryButton label="Refresh Weather" onPress={loadWeather} secondary />
+          </>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  loading: {
+  safeArea: {
     flex: 1,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+  },
+  messageBox: {
+    minHeight: 360,
+    padding: 24,
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
   },
-
-  container: {
-    flex: 1,
-    padding: 20,
+  messageText: {
+    marginTop: 12,
+    color: "#526D82",
   },
-
+  errorText: {
+    color: "#9B1C1C",
+    textAlign: "center",
+  },
   hero: {
+    paddingVertical: 8,
     alignItems: "center",
-    marginBottom: 20,
   },
-
   city: {
-    fontSize: 32,
-    fontWeight: "bold",
+    color: "#102A43",
+    fontSize: 28,
+    fontWeight: "800",
   },
-
+  date: {
+    marginTop: 3,
+    color: "#526D82",
+  },
   icon: {
-    fontSize: 70,
-    marginVertical: 10,
+    marginVertical: 6,
+    fontSize: 68,
   },
-
   temperature: {
-    fontSize: 72,
-    fontWeight: "bold",
+    color: "#102A43",
+    fontSize: 58,
+    fontWeight: "800",
   },
-
   condition: {
+    marginTop: 4,
+    color: "#102A43",
     fontSize: 18,
-    color: "#555",
+    fontWeight: "700",
   },
-
+  lightText: {
+    color: "#FFFFFF",
+  },
+  lightSubtle: {
+    color: "#E8F1F8",
+  },
   grid: {
+    marginBottom: 10,
     flexDirection: "row",
     gap: 10,
-    marginBottom: 10,
   },
-
-  alert: {
-    marginTop: 15,
-    backgroundColor: "#FFF7D6",
+  card: {
+    marginTop: 4,
     padding: 15,
-    borderRadius: 15,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CBD9E6",
+    borderRadius: 18,
   },
-
-  alertTitle: {
-    fontWeight: "bold",
+  alertCard: {
+    backgroundColor: "#FFF7D6",
+    borderColor: "#E8CE67",
+  },
+  darkAlertCard: {
+    backgroundColor: "#4A3F1D",
+    borderColor: "#8B762F",
+  },
+  cardTitle: {
     marginBottom: 5,
+    color: "#102A43",
+    fontSize: 17,
+    fontWeight: "700",
   },
-
-  feelsLike: {
-  textAlign: "center",
-  marginTop: 10,
-  fontSize: 16,
-  color: "#526D82",
-  },
-
-  refreshButton: {
-  backgroundColor: "#2563EB",
-  paddingVertical: 14,
-  borderRadius: 12,
-  alignItems: "center",
-  marginTop: 15,
-  },
-
-refreshText: {
-  color: "#FFFFFF",
-  fontWeight: "bold",
-  fontSize: 16,
+  cardText: {
+    color: "#526D82",
+    lineHeight: 20,
   },
 });
